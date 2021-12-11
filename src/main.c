@@ -15,6 +15,9 @@
 
 #include "../include/raylib.h"
 #include "../include/raygui.h"
+#include "ecs.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 //#define PLATFORM_WEB
 
@@ -26,9 +29,12 @@
 //----------------------------------------------------------------------------------
 // Global Variables Definition
 //----------------------------------------------------------------------------------
-int screenWidth = 1200;
-int screenHeight = 900;
+int screenWidth = 1000;
+int screenHeight = 1000;
 Texture2D building;
+Texture2D treeTexture; 
+Texture2D grassTexture;
+Texture2D skyTexture;
 // Use default vert shader
 Shader shdrSpot;
 //----------------------------------------------------------------------------------
@@ -49,7 +55,30 @@ typedef struct {
     unsigned int radiusLoc;
 } Spot;
 
+Entity e;
+
 Spot s;
+System sysDraw;
+System sysSprite;
+Entity *sprites;
+Entity *trees; 
+Entity grass;
+Entity sky; 
+Music background_music;
+Music cricketMusic;
+
+
+void DrawSprite(Entity *e){
+    DrawTexture(*e->components.componentSprite->texture, 
+    e->components.componentPosition->x,
+    e->components.componentPosition->y,
+    WHITE);
+} 
+void DrawSystem(Entity *e){
+    DrawRectangle(e->components.componentPosition->x,
+      e->components.componentPosition->y,100,100,
+      e->components.componentDraw->color);
+}
 //----------------------------------------------------------------------------------
 // Main Enry Point
 //----------------------------------------------------------------------------------
@@ -58,10 +87,32 @@ int main()
   // Initialization
   //--------------------------------------------------------------------------------------
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-
+  //SetAudioStreamBufferSizeDefault(MAX_SAN);
+  
   InitWindow(screenWidth, screenHeight, "raylib [core] example - basic window");
-  building = LoadTexture("./resources/building.png");
-  shdrSpot = LoadShader(0, "./resources/spotlight.fs");
+  InitAudioDevice();
+
+  background_music = LoadMusicStream("../../resources/music.mp3");
+  cricketMusic = LoadMusicStream("../../resources/crickets.mp3");
+
+  building = LoadTexture("../../resources/building.png");
+  treeTexture = LoadTexture("../../resources/tree.png");
+  grassTexture = LoadTexture("../../resources/grass.png");
+
+
+  shdrSpot = LoadShader(0, "../../resources/spotlight.fs");
+
+
+  Music music = LoadMusicStream("../../resources/country.mp3");
+
+  PlayMusicStream(music);
+
+  //background_music.looping = true;
+  //cricketMusic.looping = true;
+  printf("\n Audio Device ready: %d",IsAudioDeviceReady());
+  PlayMusicStream(background_music);
+  //PlayMusicStream(cricketMusic);
+  
   int i = 0;
   char posName[32] = "spots[x].pos\0";
   char innerName[32] = "spots[x].inner\0";
@@ -70,6 +121,23 @@ int main()
   posName[6] = '0' + i;
   innerName[6] = '0' + i;
   radiusName[6] = '0' + i;
+  
+  addComponentPosition(&e,200.01,100.22);
+  addComponentDraw(&e,RED,1);
+
+
+  trees = (Entity*) malloc(4*sizeof(Entity));
+  rand();
+  for(int i =0;i<4;i++){
+      addSpriteComponent(&trees[i],&treeTexture,(Rectangle){0,0,100,100});
+      addComponentPosition(&trees[i],GetRandomValue(200,500),GetRandomValue(100,800));
+  }
+  addSpriteComponent(&grass,&grassTexture,(Rectangle){0,0,100,100});
+  addComponentPosition(&grass,0,500);
+  
+
+  sysDraw.update = &DrawSystem;
+  sysSprite.update = &DrawSprite;
 
   s.posLoc = GetShaderLocation(shdrSpot, posName);
   s.innerLoc = GetShaderLocation(shdrSpot, innerName);
@@ -83,8 +151,8 @@ int main()
   s.pos.x = (float)GetRandomValue(64, screenWidth - 64);
   s.pos.y = (float)GetRandomValue(64, screenHeight - 64);
   s.vel = (Vector2){ 0, 0 };
-  s.inner = 28.0f * (i + 1);
-  s.radius = 48.0f * (i + 1);
+  s.inner = 68.0f * (i + 1);
+  s.radius = 98.0f * (i + 1);
 
   SetShaderValue(shdrSpot, s.posLoc, &s.pos.x, SHADER_UNIFORM_VEC2);
   SetShaderValue(shdrSpot, s.innerLoc, &s.inner, SHADER_UNIFORM_FLOAT);
@@ -105,6 +173,10 @@ int main()
 
   UnloadTexture(building);
   UnloadShader(shdrSpot);
+  UnloadMusicStream(background_music);
+  UnloadMusicStream(cricketMusic);
+  CloseAudioDevice();
+  
 
   // De-Initialization
   //--------------------------------------------------------------------------------------
@@ -128,7 +200,7 @@ void UpdateDrawFrame(void)
   //----------------------------------------------------------------------------------
   BeginDrawing();
 
-  ClearBackground(RAYWHITE);
+  ClearBackground(GRAY);
 
 
   Vector2 mp = GetMousePosition();
@@ -137,9 +209,13 @@ void UpdateDrawFrame(void)
 
   SetShaderValue(shdrSpot, s.posLoc, &s.pos.x, SHADER_UNIFORM_VEC2);
   
-  GuiGrid((Rectangle){0, 0, screenWidth, screenHeight}, 20.0f, 2); // Draw a fancy grid
+  //GuiGrid((Rectangle){0, 0, screenWidth, screenHeight}, 20.0f, 2); // Draw a fancy grid
+  
+  sysSprite.update(&grass);
+  for(int i =0;i<4;i++){
+      sysSprite.update(&trees[i]);
+  }
 
-  // Draw spot lights
   BeginShaderMode(shdrSpot);
       // Instead of a blank rectangle you could render here
       // a render texture of the full screen used to do screen
@@ -148,11 +224,13 @@ void UpdateDrawFrame(void)
       DrawRectangle(0, 0, screenWidth, screenHeight, WHITE);
   EndShaderMode();
 
-  DrawTexture(building, 0, 0, WHITE);
-  DrawText("Congrats! You created your first window!", 190, 200, 20, LIGHTGRAY);
-  DrawRectangle(100, 100, 100, 300, RED);
-  DrawRectangleV((Vector2){300, 200}, (Vector2){100, 30}, BLUE);
-
+  //DrawTexture(building, 0, 0, WHITE);
+  //DrawText("Congrats! You created your first window!", 190, 200, 20, LIGHTGRAY);
+  //DrawRectangle(100, 100, 100, 300, RED);
+  //DrawRectangleV((Vector2){300, 200}, (Vector2){100, 30}, BLUE);
+  //sysDraw.update(&e);
+  
   EndDrawing();
   //----------------------------------------------------------------------------------
 }
+
